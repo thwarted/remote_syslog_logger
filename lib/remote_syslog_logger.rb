@@ -1,5 +1,5 @@
 
-require 'remote_syslog_logger/udp_sender'
+require 'remote_syslog_logger/sender'
 require 'logger'
 
 module RemoteSyslogLogger
