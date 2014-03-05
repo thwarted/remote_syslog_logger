@@ -25,6 +25,17 @@ Use from Ruby:
 
     $logger = RemoteSyslogLogger.new('syslog.domain.com', 514)
 
+By default, it will communicate with the given host and port via UDP.  To explicitly choose UDP, use:
+
+    RemoteSyslogLogger.new_udp('syslog.domain.com', 514)
+
+To talk to a syslog server using datagrams over a UNIX domain socket:
+
+    RemoteSyslogLogger.new_unix_dgram("/var/tmp/syslog-dgram")
+
+To talk to a syslog server over a stream based UNIX domain socket:
+
+    RemoteSyslogLogger.new_unix_stream("/dev/log") # /dev/log is a UNIX stream socket on Linux
 
 
 # Source
