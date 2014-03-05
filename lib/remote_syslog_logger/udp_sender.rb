@@ -2,13 +2,10 @@ require 'socket'
 require 'syslog_protocol'
 
 module RemoteSyslogLogger
-  class UdpSender
-    def initialize(remote_hostname, remote_port, options = {})
-      @remote_hostname = remote_hostname
-      @remote_port     = remote_port
+  class Sender
+    def initialize(options = {})
       @whinyerrors     = options[:whinyerrors]
       
-      @socket = UDPSocket.new
       @packet = SyslogProtocol::Packet.new
 
       local_hostname   = options[:local_hostname] || (Socket.gethostname rescue `hostname`.chomp)
@@ -19,6 +16,10 @@ module RemoteSyslogLogger
       @packet.severity = options[:severity] || 'notice'
       @packet.tag      = options[:program]  || "#{File.basename($0)}[#{$$}]"
     end
+
+    def _transmit(data)
+      @socket.send(data, 0)
+    end
     
     def transmit(message)
       message.split(/\r?\n/).each do |line|
@@ -26,7 +27,7 @@ module RemoteSyslogLogger
           next if line =~ /^\s*$/
           packet = @packet.dup
           packet.content = line
-          @socket.send(packet.assemble, 0, @remote_hostname, @remote_port)
+          _transmit(packet.assemble)
         rescue
           $stderr.puts "#{self.class} error: #{$!.class}: #{$!}\nOriginal message: #{line}"
           raise if @whinyerrors
@@ -41,4 +42,40 @@ module RemoteSyslogLogger
       @socket.close
     end
   end
+
+  class UdpSender < Sender
+    def initialize(remote_hostname, remote_port, options = {})
+      @socket = UDPSocket.new
+      @socket.connect(remote_hostname, remote_port)
+      super(options)
+    end
+  end
+
+  class UNIXDGRAMSender < Sender
+    def initialize(path, options = {})
+      s = Socket.new(:UNIX, :DGRAM, 0)
+      s.connect(Addrinfo.unix(path))
+      @socket = UNIXSocket.for_fd(s.fileno)
+      super(options)
+    end
+  end
+
+  class UNIXStreamSender < Sender
+    def initialize(path, options = {})
+      @socket = UNIXSocket.new(path)
+      super(options)
+    end
+
+    def _transmit(data)
+      # in packet based transports, the transport framing is used to
+      # delimit messages.  With stream based transports, the messages
+      # need record terminators so use a newline to terminate each
+      # message.
+      # This works with syslog-ng over stream based transports and
+      # linux's /dev/log (which is SOCK_STREAM)
+      @socket.send(data, 0)
+      @socket.send("\n", 0)
+    end
+  end
+
 end
